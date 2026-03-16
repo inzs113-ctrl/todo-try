@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>待辦事項管理</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #f8fafc;
+        }
+        .todo-item {
+            transition: all 0.2s ease;
+        }
+        .todo-item:hover {
+            transform: translateX(4px);
+        }
+        [onclick] {
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body class="min-h-screen py-8 px-4">
+    <div class="max-w-md mx-auto bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
+        <!-- 標題區域 -->
+        <div class="bg-indigo-600 p-6">
+            <h1 class="text-2xl font-bold text-white flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewbox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                </svg>
+                我的待辦清單
+            </h1>
+            <p class="text-indigo-100 text-sm mt-1">管理日常任務，提高生活效率</p>
+        </div>
+
+        <!-- 輸入區域 -->
+        <div class="p-6 border-b border-gray-100">
+            <form id="todo-form" class="flex gap-2">
+                <input type="text" id="todo-input" 
+                    class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                    placeholder="今天要做什麼呢？" required>
+                <button type="submit" 
+                    class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
+                    </svg>
+                </button>
+            </form>
+        </div>
+
+        <!-- 篩選器 -->
+        <div class="px-6 py-3 bg-gray-50 flex justify-between items-center text-sm border-b border-gray-100">
+            <div class="flex gap-4">
+                <button onclick="setFilter('all')" id="filter-all" class="text-indigo-600 font-bold">全部</button>
+                <button onclick="setFilter('active')" id="filter-active" class="text-gray-500 hover:text-indigo-600">進行中</button>
+                <button onclick="setFilter('completed')" id="filter-completed" class="text-gray-500 hover:text-indigo-600">已完成</button>
+            </div>
+            <button onclick="clearCompleted()" class="text-gray-400 hover:text-red-500 transition-colors">清除已完成</button>
+        </div>
+
+        <!-- 列表區域 -->
+        <ul id="todo-list" class="divide-y divide-gray-100 max-h-[400px] overflow-y-auto">
+            <!-- 待辦事項會動態插入於此 -->
+        </ul>
+
+        <!-- 統計資訊 -->
+        <div class="p-4 bg-gray-50 text-center border-t border-gray-100">
+            <p id="stats-text" class="text-xs text-gray-500 italic">尚無待辦事項</p>
+        </div>
+    </div>
+
+    <!-- 自定義提示框 (取代 alert) -->
+    <div id="toast" class="fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-6 py-3 rounded-full shadow-2xl opacity-0 transition-opacity duration-300 pointer-events-none">
+        提示訊息
+    </div>
+
+    <script>
+        let todos = JSON.parse(localStorage.getItem('todos')) || [];
+        let currentFilter = 'all';
+
+        const todoForm = document.getElementById('todo-form');
+        const todoInput = document.getElementById('todo-input');
+        const todoList = document.getElementById('todo-list');
+        const statsText = document.getElementById('stats-text');
+
+        // 初始化渲染
+        renderTodos();
+
+        // 表單提交事件
+        todoForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const text = todoInput.value.trim();
+            if (text) {
+                addTodo(text);
+                todoInput.value = '';
+            }
+        });
+
+        // 新增待辦
+        function addTodo(text) {
+            const newTodo = {
+                id: Date.now(),
+                text: text,
+                completed: false,
+                createdAt: new Date().toISOString()
+            };
+            todos.unshift(newTodo);
+            saveAndRender();
+            showToast('已新增一項任務！');
+        }
+
+        // 切換狀態
+        function toggleTodo(id) {
+            todos = todos.map(todo => 
+                todo.id === id ? { ...todo, completed: !todo.completed } : todo
+            );
+            saveAndRender();
+        }
+
+        // 刪除待辦
+        function deleteTodo(id) {
+            todos = todos.filter(todo => todo.id !== id);
+            saveAndRender();
+            showToast('任務已移除');
+        }
+
+        // 清除已完成
+        function clearCompleted() {
+            const beforeCount = todos.length;
+            todos = todos.filter(todo => !todo.completed);
+            if (beforeCount !== todos.length) {
+                saveAndRender();
+                showToast('已清除所有完成項目');
+            }
+        }
+
+        // 設定篩選器
+        function setFilter(filter) {
+            currentFilter = filter;
+            
+            // 更新 UI 樣式
+            ['all', 'active', 'completed'].forEach(f => {
+                const btn = document.getElementById(`filter-${f}`);
+                if (f === filter) {
+                    btn.classList.add('text-indigo-600', 'font-bold');
+                    btn.classList.remove('text-gray-500');
+                } else {
+                    btn.classList.remove('text-indigo-600', 'font-bold');
+                    btn.classList.add('text-gray-500');
+                }
+            });
+            
+            renderTodos();
+        }
+
+        // 儲存至 LocalStorage 並渲染
+        function saveAndRender() {
+            localStorage.setItem('todos', JSON.stringify(todos));
+            renderTodos();
+        }
+
+        // 渲染列表
+        function renderTodos() {
+            const filteredTodos = todos.filter(todo => {
+                if (currentFilter === 'active') return !todo.completed;
+                if (currentFilter === 'completed') return todo.completed;
+                return true;
+            });
+
+            todoList.innerHTML = '';
+
+            if (filteredTodos.length === 0) {
+                todoList.innerHTML = `
+                    <div class="p-10 text-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-gray-200 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <p class="text-gray-400">目前沒有相關任務</p>
+                    </div>
+                `;
+            } else {
+                filteredTodos.forEach(todo => {
+                    const li = document.createElement('li');
+                    li.className = `todo-item p-4 flex items-center justify-between bg-white group ${todo.completed ? 'bg-gray-50' : ''}`;
+                    
+                    li.innerHTML = `
+                        <div class="flex items-center gap-3 flex-1 overflow-hidden">
+                            <div onclick="toggleTodo(${todo.id})" class="flex-shrink-0 w-6 h-6 border-2 rounded-full flex items-center justify-center transition-colors ${todo.completed ? 'bg-green-500 border-green-500' : 'border-gray-300 hover:border-indigo-500'}">
+                                ${todo.completed ? '<svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>' : ''}
+                            </div>
+                            <span onclick="toggleTodo(${todo.id})" class="truncate text-gray-700 ${todo.completed ? 'line-through text-gray-400' : ''}">
+                                ${escapeHtml(todo.text)}
+                            </span>
+                        </div>
+                        <button onclick="deleteTodo(${todo.id})" class="ml-4 p-2 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                        </button>
+                    `;
+                    todoList.appendChild(li);
+                });
+            }
+
+            // 更新統計資訊
+            const remaining = todos.filter(t => !t.completed).length;
+            statsText.innerText = `剩餘 ${remaining} 個任務需要完成`;
+        }
+
+        // 防止 XSS 攻擊
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // 提示訊息功能
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.innerText = message;
+            toast.style.opacity = '1';
+            setTimeout(() => {
+                toast.style.opacity = '0';
+            }, 2000);
+        }
+    </script>
+</body>
+</html>
